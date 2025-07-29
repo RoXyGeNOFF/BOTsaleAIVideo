@@ -1,12 +1,13 @@
 
 from aiogram import Router, F
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.filters import Command
-from database import get_user, add_user, update_subscription, remove_premium, decrement_free_generation
-from payment import create_payment, create_yoomoney_payment
-from veo3_api import generate_with_veo3
+from service import grant_videos, decrement_free_generation, set_premium, remove_premium, get_expiring_premium_users
+from external_api import generate_video_with_veo3, create_yookassa_payment, create_yoomoney_payment
+from veo3_api import generate_with_veo3_task
 from config import CHANNEL_USERNAME
 from aiogram import Bot
+import asyncio
 
 router = Router()
 
@@ -23,6 +24,27 @@ async def check_subscription(user_id, bot: Bot) -> bool:
         return member.status in ("member", "administrator", "creator")
     except Exception:
         return False
+
+async def send_video_when_ready(bot: Bot, user_id: int, prompt: str, free: bool, left: int):
+    task = generate_with_veo3_task.delay(prompt)
+    progress_msg = await bot.send_message(user_id, "Генерация видео... [░░░░░░░░░░] 0%", reply_markup=ReplyKeyboardRemove())
+    progress = 0
+    while not task.ready():
+        await asyncio.sleep(5)
+        progress = min(progress + 20, 90)
+        bar = "█" * (progress // 10) + "░" * (10 - progress // 10)
+        try:
+            await bot.edit_message_text(f"Генерация видео... [{bar}] {progress}%", user_id, progress_msg.message_id)
+        except Exception:
+            pass
+    result_file = task.get()
+    caption = f"({'Бесплатная' if free else 'Оплаченная'} генерация, осталось: {left})\nВаше видео готово! Видео хранится 2 дня."
+    with open(result_file, "rb") as video:
+        await bot.send_video(user_id, video, caption=caption)
+    try:
+        await bot.edit_message_text("Видео готово!", user_id, progress_msg.message_id)
+    except Exception:
+        pass
 
 @router.message(Command("start"))
 async def start(message: Message):
@@ -63,6 +85,14 @@ async def buy_tariff(message: Message):
             await message.answer(text)
             break
 
+@router.message(Command("faq"))
+async def faq(message: Message):
+    await message.answer(FAQ_TEXT, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+
+@router.message(Command("support"))
+async def support(message: Message):
+    await message.answer(SUPPORT_TEXT, reply_markup=ReplyKeyboardRemove())
+
 @router.message(F.text)
 async def handle_prompt(message: Message):
     # Проверка подписки на канал
@@ -78,17 +108,15 @@ async def handle_prompt(message: Message):
     if not user["is_premium"]:
         if user["free_generations"] and user["free_generations"] > 0:
             decrement_free_generation(message.from_user.id)
-            result_file = generate_with_veo3(message.text)
-            with open(result_file, "rb") as video:
-                await message.answer_video(video, caption=f"(Бесплатная генерация, осталось: {user['free_generations']-1})\nВаше видео готово! Видео хранится 2 дня.")
+            await message.answer("Ваше видео поставлено в очередь. Когда оно будет готово, вы получите уведомление!")
+            asyncio.create_task(send_video_when_ready(message.bot, message.from_user.id, message.text, True, user['free_generations']-1))
             return
         # 2. Оплаченные видео
         elif user["videos_left"] and user["videos_left"] > 0:
             from database import decrement_video
             decrement_video(message.from_user.id)
-            result_file = generate_with_veo3(message.text)
-            with open(result_file, "rb") as video:
-                await message.answer_video(video, caption=f"(Оплаченное видео, осталось: {user['videos_left']-1})\nВаше видео готово! Видео хранится 2 дня.")
+            await message.answer("Ваше видео поставлено в очередь. Когда оно будет готово, вы получите уведомление!")
+            asyncio.create_task(send_video_when_ready(message.bot, message.from_user.id, message.text, False, user['videos_left']-1))
             return
         else:
             await message.answer("У вас закончились бесплатные и оплаченные видео. Купите ещё через /buy.")
@@ -101,6 +129,5 @@ async def handle_prompt(message: Message):
             remove_premium(message.from_user.id)
             await message.answer("Срок вашей подписки истёк. Купите видео через /buy.")
             return
-    result_file = generate_with_veo3(message.text)
-    with open(result_file, "rb") as video:
-        await message.answer_video(video, caption="Ваше видео готово! Видео хранится 2 дня.")
+    await message.answer("Ваше видео поставлено в очередь. Когда оно будет готово, вы получите уведомление!")
+    asyncio.create_task(send_video_when_ready(message.bot, message.from_user.id, message.text, False, 0))

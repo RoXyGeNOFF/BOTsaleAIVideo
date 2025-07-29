@@ -5,6 +5,7 @@ from config import BOT_TOKEN
 from handlers import router
 from database import init_db
 from database import get_users_with_expiring_premium
+from loguru import logger
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
@@ -27,4 +28,9 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    logger.add("bot.log", rotation="10 MB")
+    try:
+        logger.info("Bot starting...")
+        asyncio.run(main())
+    except Exception as e:
+        logger.exception(f"Bot crashed: {e}")

@@ -6,14 +6,31 @@ services:
     build: .
     env_file:
       - .env
+    command: python bot.py
+    depends_on:
+      - db
   webhook:
-    image: python:3.11-slim
-    volumes:
-      - .:/app
-    working_dir: /app
-    command: >
-      sh -c "pip install flask requests && flask --app payment run --host=0.0.0.0 --port=8000"
-    ports:
-      - "8000:8000"
+    build: .
     env_file:
       - .env
+    command: sh -c "pip install flask requests && flask --app payment run --host=0.0.0.0 --port=8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: veo3
+      POSTGRES_USER: veo3user
+      POSTGRES_PASSWORD: veo3pass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+volumes:
+  pgdata:
