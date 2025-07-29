@@ -89,4 +89,4 @@ CELERY_RESULT_BACKEND=redis://redis:6379/0
 
 ## Поддержка
 
-По вопросам и предложениям пишите: @your_support_username 
+По вопросам и предложениям пишите: https://t.me/RoXyGeNOFF
