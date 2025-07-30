@@ -1,8 +1,12 @@
 # Veo3 Telegram Bot
 
-## Описание
+- [Русский гайд по установке и деплою](README_RU.md)
+- [English installation & deployment guide](README_EN.md)
 
-Veo3 Bot — Telegram-бот для генерации видео по тексту с помощью искусственного интеллекта Veo3. Бот поддерживает очередь генерации, прогресс-бар, оплату через ЮKassa и YooMoney, админ-панель с авторизацией, историю платежей и аналитику. Все секреты хранятся в .env.
+---
+
+Veo3 Bot — Telegram-бот для генерации видео по тексту с помощью искусственного интеллекта Veo3.
+Veo3 Bot is a Telegram bot for generating videos from text using Veo3 AI.
 
 ---
 
